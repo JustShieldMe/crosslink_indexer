@@ -52,13 +52,20 @@ committed `Cargo.lock` is load-bearing).
 ```sh
 cargo build --release
 
-POS=~/.cache/zebra/<your-cache-dir>/pos.chain
-./target/release/crosslink-indexer bft --pos-chain "$POS"   # ~10s
-./target/release/crosslink-indexer pow                      # ~6 min first run
+# optional, but assumed by every example below: put it on your PATH
+ln -s "$PWD/target/release/crosslink-indexer" ~/.local/bin/crosslink-indexer
 
-./target/release/crosslink-indexer stats
-./target/release/crosslink-indexer participation --from 95000
+POS=~/.cache/zebra/<your-cache-dir>/pos.chain
+crosslink-indexer bft --pos-chain "$POS"   # ~10s
+crosslink-indexer pow                      # ~6 min first run
+
+crosslink-indexer stats
+crosslink-indexer participation --from 95000
 ```
+
+Run these **from the repo directory**, or pass `--db <absolute path>`. `--db`
+is a relative path by default, so the working directory decides which database
+you get — see [below](#three-things-to-know-up-front).
 
 ## Documentation
 
@@ -73,7 +80,7 @@ POS=~/.cache/zebra/<your-cache-dir>/pos.chain
 | [docs/operations.md](docs/operations.md) | Keeping it current, performance, sizing, safe rebuilds |
 | [docs/findings.md](docs/findings.md) | Notable things the index has surfaced so far |
 
-## Two things to know up front
+## Three things to know up front
 
 **Byte order will bite you.** The node uses three different hex display
 conventions for 32-byte values, and the same finalizer can appear under two
@@ -85,6 +92,22 @@ bytes everywhere and displays the node's convention. Read
 and `unwrap()`s on write failure, so damaging it takes the node down. This tool
 opens it strictly read-only and never writes to it. See
 [docs/operations.md](docs/operations.md#poschain-safety).
+
+**The working directory picks your database.** `--db` defaults to the relative
+path `crosslink.sqlite`, and the file is created on first use. Run the tool from
+somewhere else and it will not complain — it quietly creates a second, empty
+database and reports zeros:
+
+```
+$ cd /tmp && crosslink-indexer stats
+== BFT / finalizer ==
+  bft blocks       : 0
+```
+
+So if `stats` shows zeros on an index you know is populated, check where you are
+before re-indexing anything. Pass `--db ~/crosslink-indexer/crosslink.sqlite` to
+work from anywhere. See
+[docs/installation.md](docs/installation.md#where-you-run-it-from-matters).
 
 ## Status
 

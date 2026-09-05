@@ -76,6 +76,63 @@ cargo build --release
 First build compiles the Zcash cryptography stack and takes a few minutes.
 Incremental rebuilds of this crate alone are a few seconds.
 
+## Putting it on your PATH
+
+The build leaves the binary at `target/release/crosslink-indexer`. To run it as
+`crosslink-indexer` from anywhere, symlink it onto your PATH:
+
+```sh
+ln -s "$PWD/target/release/crosslink-indexer" ~/.local/bin/crosslink-indexer
+```
+
+Prefer the symlink over `cargo install --path .`. It points at the build output,
+so every `cargo build --release` takes effect immediately with no reinstall
+step — which matters here, because the parsers track a moving monolith and get
+rebuilt often (see [below](#keeping-up-with-the-monolith)).
+
+Check it resolves:
+
+```sh
+crosslink-indexer --help
+```
+
+## Where you run it from matters
+
+`--db` defaults to `crosslink.sqlite` — a **relative** path, resolved against
+the current working directory. The database is also created on first use. Those
+two facts combine badly: running the tool outside the directory holding your
+database does not fail, it silently creates a new empty one and reports zeros.
+
+```
+$ cd /tmp && crosslink-indexer stats
+== BFT / finalizer ==
+  bft blocks       : 0
+== PoW / mining ==
+  blocks           : 0
+```
+
+**If `stats` reports zeros on a database you know is populated, this is why.**
+Check your working directory before concluding anything is wrong with the index,
+and before re-running a backfill over it.
+
+Either run from the repo:
+
+```sh
+cd ~/crosslink-indexer && crosslink-indexer stats
+```
+
+Or give an absolute path, which works from anywhere:
+
+```sh
+crosslink-indexer --db ~/crosslink-indexer/crosslink.sqlite stats
+```
+
+If you use it from other directories routinely, an alias pins the database once:
+
+```sh
+alias cidx='crosslink-indexer --db ~/crosslink-indexer/crosslink.sqlite'
+```
+
 ## Keeping up with the monolith
 
 When the monolith's wire formats change, rebuild:
