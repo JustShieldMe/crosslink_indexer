@@ -140,9 +140,15 @@ pub fn index(
 
             for h in height..=batch_end {
                 let blk = rpc.block_verbose(h)?;
-                let hash = hex::decode(
+                // Store the RAW hash, not the RPC's display hex. Zcash block
+                // hashes are shown byte-reversed, while `candidate_hash` in
+                // bft_block comes from BlockHash::from_header_data and is raw.
+                // Storing display order here would make that join silently
+                // match nothing. Raw everywhere; reverse only to display.
+                let mut hash = hex::decode(
                     blk.get("hash").and_then(|v| v.as_str()).context("block has no hash")?,
                 )?;
+                hash.reverse();
                 let txs = blk.get("tx").and_then(|v| v.as_array()).cloned().unwrap_or_default();
                 let (miner, subsidy) = coinbase_payout(&txs);
 

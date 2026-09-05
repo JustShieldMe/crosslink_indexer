@@ -1,221 +1,98 @@
 # crosslink-indexer
 
-Analytics indexer for a Crosslink node. Builds a SQLite database covering three
-domains that the node keeps in three very different places:
+Builds a queryable SQLite database of a Crosslink node's history, for analytics
+on **mining**, **staking actions**, and **finalizer behaviour**.
 
-| Domain | Source | Why |
+## What it does
+
+A Crosslink node keeps those three domains in three different places, and only
+one of them is fully reachable over JSON-RPC. This tool reads all three and
+normalises them into one database you can query with plain SQL.
+
+| Domain | Where the node keeps it | Reachable by RPC? |
 |---|---|---|
-| Finalizer behaviour | the node's `pos.chain` file | RPC exposes only the current tip, not history |
-| Mining / PoW blocks | JSON-RPC `getblock <h> 2` | straightforward |
-| Staking actions | raw transaction bytes from that same RPC | **no RPC exposes staking actions in any form** |
+| Finalizer behaviour | the `pos.chain` file on disk | tip only — no history |
+| Mining / PoW blocks | block store, via `getblock` | yes |
+| Staking actions | inside raw transaction bodies | **no — not exposed at all** |
 
-## Why this repo is not dependency-free
+The staking gap is the reason this exists as a Rust binary rather than a script.
+Staking actions live in the `VCrosslink` transaction variant (tx version 7,
+version group `0xFFFFFFFE`), serialised after the Orchard bundle. No RPC decodes
+them, so the only way to see one is to pull each transaction's raw bytes and
+deserialise them with the node's own consensus code — which is what this does.
 
-It is a separate repo, but it is **not** independent of the node, and it cannot
-be. Staking actions live in the `VCrosslink` transaction variant (tx version 7,
-version group `0xFFFFFFFE`), serialised after the Orchard bundle; the BFT chain
-is stored in a bespoke binary format. Both need consensus-exact parsing.
+Likewise the BFT chain: `get_tfl_fat_pointer_to_bft_chain_tip` gives you the
+current tip and nothing behind it, while `pos.chain` holds every decided block,
+every certificate signature, and the full roster with voting power at every
+height.
 
-That parsing lives in the monolith's **fork** of `zcash_primitives`. The
-crates.io crate of the same name and version has no `bft` module, no
-`VCrosslink`, and no `StakingAction` — the crosslink version group id is even
-still marked *"In-development"* in the source. So this repo carries exactly one
-link to the node:
+## What you get
 
-```toml
-zcash_primitives = { path = "../crosslink_monolith/librustzcash/zcash_primitives" }
-zcash_protocol   = { path = "../crosslink_monolith/librustzcash/components/zcash_protocol" }
+Roughly, on a node at PoW height ~515k / BFT height ~99k:
+
+```
+bft_block        99,397 rows    one per decided BFT block
+bft_signature     1.36M rows    who signed each certificate
+roster_entry      3.89M rows    who was eligible, and with how much power
+pow_block          515k rows    blocks, miners, subsidies, difficulty
+staking_action     8,649 rows   decoded bonds, unbondings, withdrawals, retargets
+                    ~614 MB
 ```
 
-Consequences worth knowing before you rely on this:
+Indexing the full `pos.chain` (1.4 GB) takes about **10 seconds**. A full
+515k-block RPC backfill takes about **6 minutes** at ~1,500 blocks/sec. Both
+commands are incremental, so keeping it current costs milliseconds.
 
-* **A sibling checkout is required.** `crosslink-indexer/` and
-  `crosslink_monolith/` must sit in the same parent directory. To point
-  elsewhere, edit the two paths in `Cargo.toml`.
-* **`Cargo.lock` is committed and load-bearing.** It is seeded from
-  `librustzcash/Cargo.lock` because the dependency tree pins `core2 0.3.x`,
-  which is **yanked** from crates.io. Resolving from scratch fails outright.
-  Do not delete it.
-* **The wire formats are unstable.** `BftBlock` is already at version 2 and its
-  own source warns against changing the layout without bumping the version.
-  When the node's formats move, rebuild against the updated monolith and
-  re-index. The indexer reads the version field and stores it, so a format
-  change shows up in the data rather than being silently mis-parsed.
+## Quickstart
 
-Vendoring a hand-written parser instead would remove the dependency, but would
-silently rot the first time a format changed. Linking the real code is the
-safer trade.
-
-## Build
+Requires a sibling checkout of the monolith (see
+[docs/installation.md](docs/installation.md) — this is not optional, and the
+committed `Cargo.lock` is load-bearing).
 
 ```sh
 cargo build --release
-```
 
-## Use
-
-```sh
 POS=~/.cache/zebra/<your-cache-dir>/pos.chain
-
-# Finalizer history: full 1.4 GB chain in ~10s. Resumable; safe to re-run.
-./target/release/crosslink-indexer bft --pos-chain "$POS"
-
-# PoW blocks + staking actions. ~2000 blocks/s; a full 515k backfill is minutes.
-# Resumes from where it stopped when --from is omitted.
-./target/release/crosslink-indexer pow
+./target/release/crosslink-indexer bft --pos-chain "$POS"   # ~10s
+./target/release/crosslink-indexer pow                      # ~6 min first run
 
 ./target/release/crosslink-indexer stats
 ./target/release/crosslink-indexer participation --from 95000
-./target/release/crosslink-indexer finalizer <pubkey-as-the-RPC-shows-it>
 ```
 
-Both commands are incremental, so a cron entry or a `watch` loop keeps the
-database current.
+## Documentation
 
-## Two traps
+| Document | What's in it |
+|---|---|
+| [docs/installation.md](docs/installation.md) | Build requirements, the path dependency, why `Cargo.lock` is committed |
+| [docs/concepts.md](docs/concepts.md) | The Crosslink data model — BFT vs PoW, certificates, rosters, staking periods, bond lifecycle |
+| [docs/cli.md](docs/cli.md) | Every command and flag, with examples and resume semantics |
+| [docs/schema.md](docs/schema.md) | Every table and column, indexes, and how the tables join |
+| [docs/queries.md](docs/queries.md) | A cookbook of analytics queries for all three domains |
+| [docs/byte-order.md](docs/byte-order.md) | **Read before writing queries.** Three different hex conventions are in play |
+| [docs/operations.md](docs/operations.md) | Keeping it current, performance, sizing, safe rebuilds |
+| [docs/findings.md](docs/findings.md) | Notable things the index has surfaced so far |
 
-### 1. Pubkey byte order
+## Two things to know up front
 
-The node does not display finalizer pubkeys consistently:
+**Byte order will bite you.** The node uses three different hex display
+conventions for 32-byte values, and the same finalizer can appear under two
+different hex strings depending on which RPC you asked. This tool stores raw
+bytes everywhere and displays the node's convention. Read
+[docs/byte-order.md](docs/byte-order.md) before querying tables directly.
 
-* `PubKeyID` — certificate signatures, `get_tfl_recency_status`, `getbondinfo`
-  bond keys — has `Display`/`Serialize` impls that **reverse** the bytes.
-* `RosterMember.pub_key` is a plain `[u8; 32]` serialised **forward**.
+**`pos.chain` is a live file.** The running node holds it open in append mode
+and `unwrap()`s on write failure, so damaging it takes the node down. This tool
+opens it strictly read-only and never writes to it. See
+[docs/operations.md](docs/operations.md#poschain-safety).
 
-So the same finalizer appears under two different hex strings depending on
-which RPC you asked. This indexer stores the **raw** bytes everywhere (that is
-what makes `bft_signature` and `roster_entry` join correctly) and **displays**
-the reversed form, because that is the one you can paste back into an RPC call.
+## Status
 
-`finalizer <key>` takes the RPC display form by default; pass `--raw-order` for
-literal storage bytes. If a lookup reports "never appeared in any roster", the
-byte order is the first thing to check.
+Working and in use, but young. The formats it parses are still under
+development in the monolith — `BftBlock` is at version 2 and its own source
+warns against changing the layout without bumping the version. When the node's
+formats move, rebuild against the updated monolith and re-index. The indexer
+records format versions, so a change surfaces as data rather than silent
+mis-parsing.
 
-**Txids are reversed the same way.** `staking_action.txid` holds the raw bytes
-(`TxId::as_ref()`), while every RPC displays the reverse. The CLI prints the
-reversed form, so txids in its output paste straight into `getrawtransaction`.
-Querying the table directly, you must reverse:
-
-```sql
--- WRONG: returns nothing
-SELECT * FROM staking_action WHERE hex(txid) = upper('<txid from RPC>');
--- RIGHT:
-SELECT height, kind_name FROM staking_action
-WHERE txid = unhex_reversed('<txid from RPC>');   -- i.e. reverse the bytes first
-```
-
-### 2. `pos.chain` is a live file
-
-The node holds it open in append mode and `unwrap()`s on write failure, so
-corrupting it takes the node down with it. This indexer therefore:
-
-1. opens it **strictly read-only** — never creates, writes, or truncates;
-2. commits only **whole records**, because the tail is routinely torn mid-append;
-3. **verifies the resume point** — the last indexed record must end exactly
-   where the stored byte offset says, and the chain identity (hash of the first
-   decided BFT block) must match — and otherwise re-indexes from scratch.
-
-That third check matters: this chain has diverged and been rebuilt before, as
-the `pos.chain.diverged_at_*` snapshots next to the live file show. A stale
-byte offset applied to a rebuilt file would otherwise write silent garbage.
-
-## Schema
-
-`bft_block` — one row per decided BFT block: certificate hash/height/round,
-`candidate_hash` (the PoW block it finalizes — **join key to `pow_block.hash`**),
-roster size and total power, signer count and power, byte range in `pos.chain`.
-
-`bft_signature (bft_height, pub_key)` — who signed each certificate.
-
-`roster_entry (bft_height, pub_key, voting_power, txid_count)` — who was
-*eligible* to sign, and with how much power.
-
-> Participation is `roster_entry LEFT JOIN bft_signature`. Eligible-but-absent
-> is the interesting set. Note that BFT needs ⅔ **by power, not by count**, so
-> a certificate carrying 15 of 45 signatures is normal — weight by power.
-
-`pow_block` — height, hash, time, bits, difficulty, size, tx count,
-`miner_address` and `subsidy_zats` (from the coinbase's first output).
-
-`staking_action` — decoded from VCrosslink bodies: `kind`/`kind_name`,
-`amount_zats`, `bond_key` (arg32_0), `challenge` (arg32_1), `target_finalizer`
-(arg32_2, only for kinds that name one), plus `period_offset` so window
-violations show up as data. Staking actions are only consensus-valid where
-`height % 150 < 70`.
-
-## Example queries
-
-```sql
--- Finalizers that have gone quiet: still in the roster, no longer signing.
-SELECT r.pub_key, COUNT(*) eligible,
-       SUM(s.pub_key IS NOT NULL) signed,
-       AVG(r.voting_power)/1e8 mean_ctaz
-FROM roster_entry r
-LEFT JOIN bft_signature s USING (bft_height, pub_key)
-WHERE r.bft_height > (SELECT MAX(bft_height) - 1000 FROM bft_block)
-GROUP BY r.pub_key HAVING signed * 1.0 / eligible < 0.5
-ORDER BY mean_ctaz DESC;
-
--- How close finality runs to the 2/3 power threshold.
-SELECT bft_height, 1.0 * signer_power / roster_power AS frac
-FROM bft_block WHERE roster_power > 0 AND frac < 0.75 ORDER BY frac LIMIT 50;
-
--- Mining concentration.
-SELECT miner_address, COUNT(*) blocks, SUM(subsidy_zats)/1e8 ctaz
-FROM pow_block GROUP BY miner_address ORDER BY blocks DESC;
-
--- Bond lifecycle for one bond.
-SELECT height, kind_name, amount_zats/1e8 ctaz
-FROM staking_action WHERE bond_key = ?1 ORDER BY height;
-
--- Cross-chain: BFT finalization against the PoW block it finalized.
-SELECT b.bft_height, p.height pow_height, p.time
-FROM bft_block b JOIN pow_block p ON p.hash = b.candidate_hash
-ORDER BY b.bft_height DESC LIMIT 20;
-```
-
-## A finding this surfaced
-
-Running `stats` over the full chain reports 28 staking actions that sit outside
-the staking window and that consensus does **not** exempt. The check mirrors
-`check_staking_day_window` in `zebra-consensus` exactly, including both
-documented carve-outs: `RetargetDelegationBond` is exempt, and heights
-1120, 2320, 2620, 2621 and 3224 are hardcoded exceptions.
-
-That exception list is itself corroborating evidence that the decoder is right:
-this indexer rediscovers precisely those five heights from raw transaction bytes,
-having been told nothing about them.
-
-The remaining 28 run from height 352270 to 513220, all at offsets 70-77 (just
-past the boundary), and they are confirmed independently by the node: e.g.
-
-```
-$ getrawtransaction f2cff876f7fe54223213c2db06b0a4416e065cc21ada67099e294a14b7857ebd 1
-  height 352270, version 7 (VCrosslink), height % 150 = 70
-```
-
-`check_staking_day_window` is live in the verification path
-(`zebra-consensus/src/transaction.rs:411`), so these are main-chain
-transactions that the current rule would reject. The likely reading is that
-they were accepted under earlier rules and the exception list was never
-extended past the early heights — the same pattern its own
-`TODO: @Prod @Season2 remove this temporary cruft` comment describes. Worth
-confirming before anyone attempts a full verifying resync from genesis.
-
-This is reported as a NOTE rather than a WARNING because the indexer cannot
-tell which rules were in force when each block was accepted; that call belongs
-to someone who knows the devnet's history.
-
-## Limits
-
-* **Staking rewards are not derivable.** `getbondinfo` returns only
-  `{amount, status, last_action_height}` with no reward field, and nothing else
-  separates yield from principal. This indexer records principal movements
-  only, and does not invent a yield number.
-* **`pow_block` is best-chain only**, as seen by the node at index time; reorged
-  blocks are overwritten rather than retained.
-* **Proposal signatures** in `pos.chain` are stored as a count. They are bare
-  64-byte signatures with no pubkey attached, so attributing them would mean
-  re-deriving the signing order — not attempted.
-* `roster_entry.txid_count` records how many stake txids back each roster entry;
-  the txids themselves are not yet expanded into their own table.
+Known limits are listed in [docs/schema.md](docs/schema.md#limits).

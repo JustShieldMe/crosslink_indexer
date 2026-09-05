@@ -8,7 +8,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 pub fn open(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS roster_entry (
 CREATE INDEX IF NOT EXISTS idx_roster_entry_pk ON roster_entry(pub_key, bft_height);
 
 -- ---------------------------------------------------------------- PoW / mining
+-- `hash` is the RAW block hash, matching bft_block.candidate_hash so the two
+-- chains join directly. RPCs display block hashes byte-reversed; reverse before
+-- comparing against anything you copied out of a node response.
 CREATE TABLE IF NOT EXISTS pow_block (
     height        INTEGER PRIMARY KEY,
     hash          BLOB    NOT NULL UNIQUE,
