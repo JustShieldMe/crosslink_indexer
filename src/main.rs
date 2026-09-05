@@ -120,6 +120,13 @@ fn main() -> Result<()> {
 /// which RPC you asked. We render the reversed form everywhere, since that is
 /// the one a user can paste back into an RPC call.
 fn pk_display(raw: &[u8]) -> String {
+    rev_hex(raw)
+}
+
+/// Same reversal applies to txids: `TxId::as_ref()` is raw, every RPC shows the
+/// reverse. Stored raw, displayed reversed, so output is paste-able into
+/// `getrawtransaction`.
+fn rev_hex(raw: &[u8]) -> String {
     let mut b = raw.to_vec();
     b.reverse();
     hex::encode(b)
@@ -136,6 +143,16 @@ fn pk_parse(s: &str, raw_order: bool) -> Result<Vec<u8>> {
     }
     Ok(b)
 }
+
+/// The rows consensus would reject: outside the window, not a retarget, and not
+/// one of the hardcoded exceptions in `check_staking_day_window`.
+const WINDOW_VIOLATION_ROWS: &str = "SELECT height, period_offset, txid FROM staking_action \
+     WHERE period_offset >= 70 AND kind_name != 'RetargetDelegationBond' \
+       AND height NOT IN (1120, 2320, 2620, 2621, 3224)";
+
+const WINDOW_VIOLATION_SQL: &str = "SELECT COUNT(*) FROM staking_action \
+     WHERE period_offset >= 70 AND kind_name != 'RetargetDelegationBond' \
+       AND height NOT IN (1120, 2320, 2620, 2621, 3224)";
 
 fn scalar(conn: &rusqlite::Connection, sql: &str) -> Result<i64> {
     Ok(conn.query_row(sql, [], |r| r.get::<_, Option<i64>>(0))?.unwrap_or(0))
@@ -195,12 +212,25 @@ fn stats(conn: &rusqlite::Connection) -> Result<()> {
             let (k, c, amt) = row?;
             println!("    {k:<40} {c:>7}  {:.4} ctaz", amt as f64 / 1e8);
         }
-        let bad = scalar(
-            conn,
-            "SELECT COUNT(*) FROM staking_action WHERE period_offset >= 70",
-        )?;
+        // Mirror the consensus predicate exactly (zebra-consensus
+        // check_staking_day_window): RetargetDelegationBond is exempt, and five
+        // early heights are hardcoded exceptions. Anything left over is a
+        // staking action the current rule would reject.
+        let bad = scalar(conn, WINDOW_VIOLATION_SQL)?;
         if bad > 0 {
-            println!("  WARNING: {bad} actions outside the staking window (offset >= 70)");
+            println!(
+                "  NOTE: {bad} actions outside the staking window that consensus does not exempt"
+            );
+            let mut st = conn.prepare(&format!(
+                "SELECT height, period_offset, txid FROM ({WINDOW_VIOLATION_ROWS}) ORDER BY height LIMIT 5"
+            ))?;
+            let rows = st.query_map([], |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, Vec<u8>>(2)?))
+            })?;
+            for row in rows {
+                let (h, off, txid) = row?;
+                println!("    height {h} (offset {off})  {}", rev_hex(&txid));
+            }
         }
     }
     Ok(())

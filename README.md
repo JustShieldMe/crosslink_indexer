@@ -91,6 +91,19 @@ the reversed form, because that is the one you can paste back into an RPC call.
 literal storage bytes. If a lookup reports "never appeared in any roster", the
 byte order is the first thing to check.
 
+**Txids are reversed the same way.** `staking_action.txid` holds the raw bytes
+(`TxId::as_ref()`), while every RPC displays the reverse. The CLI prints the
+reversed form, so txids in its output paste straight into `getrawtransaction`.
+Querying the table directly, you must reverse:
+
+```sql
+-- WRONG: returns nothing
+SELECT * FROM staking_action WHERE hex(txid) = upper('<txid from RPC>');
+-- RIGHT:
+SELECT height, kind_name FROM staking_action
+WHERE txid = unhex_reversed('<txid from RPC>');   -- i.e. reverse the bytes first
+```
+
 ### 2. `pos.chain` is a live file
 
 The node holds it open in append mode and `unwrap()`s on write failure, so
@@ -160,6 +173,38 @@ SELECT b.bft_height, p.height pow_height, p.time
 FROM bft_block b JOIN pow_block p ON p.hash = b.candidate_hash
 ORDER BY b.bft_height DESC LIMIT 20;
 ```
+
+## A finding this surfaced
+
+Running `stats` over the full chain reports 28 staking actions that sit outside
+the staking window and that consensus does **not** exempt. The check mirrors
+`check_staking_day_window` in `zebra-consensus` exactly, including both
+documented carve-outs: `RetargetDelegationBond` is exempt, and heights
+1120, 2320, 2620, 2621 and 3224 are hardcoded exceptions.
+
+That exception list is itself corroborating evidence that the decoder is right:
+this indexer rediscovers precisely those five heights from raw transaction bytes,
+having been told nothing about them.
+
+The remaining 28 run from height 352270 to 513220, all at offsets 70-77 (just
+past the boundary), and they are confirmed independently by the node: e.g.
+
+```
+$ getrawtransaction f2cff876f7fe54223213c2db06b0a4416e065cc21ada67099e294a14b7857ebd 1
+  height 352270, version 7 (VCrosslink), height % 150 = 70
+```
+
+`check_staking_day_window` is live in the verification path
+(`zebra-consensus/src/transaction.rs:411`), so these are main-chain
+transactions that the current rule would reject. The likely reading is that
+they were accepted under earlier rules and the exception list was never
+extended past the early heights — the same pattern its own
+`TODO: @Prod @Season2 remove this temporary cruft` comment describes. Worth
+confirming before anyone attempts a full verifying resync from genesis.
+
+This is reported as a NOTE rather than a WARNING because the indexer cannot
+tell which rules were in force when each block was accepted; that call belongs
+to someone who knows the devnet's history.
 
 ## Limits
 
