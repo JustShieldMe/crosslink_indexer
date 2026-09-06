@@ -3,7 +3,7 @@ name = "crosslink-indexer"
 version = "0.1.0"
 edition = "2021"
 description = "Analytics indexer for a Crosslink node: mining, staking actions, and finalizer behaviour"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 # The ONLY link to the node. This is the monolith's FORK of zcash_primitives --

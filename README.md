@@ -119,3 +119,7 @@ records format versions, so a change surfaces as data rather than silent
 mis-parsing.
 
 Known limits are listed in [docs/schema.md](docs/schema.md#limits).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
