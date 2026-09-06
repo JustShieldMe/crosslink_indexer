@@ -286,6 +286,17 @@ SELECT height,
 FROM staking_action ORDER BY height;
 ```
 
+> **The `WithdrawDelegationBond` amount does not reconcile with what that bond
+> staked.** One bond created for 0.01 ctaz withdrew 599.5655 ctaz — a 59,957×
+> return — while another created for 10 ctaz withdrew 10.0052, almost exactly
+> its principal. There is no consistent rate across the 6 withdrawals this
+> chain has ever seen (ratios from 1.0× to 59,957×). At *daily* resolution the
+> effect is invisible — 824 ctaz of withdrawals against 2.16M ever bonded — but
+> at block resolution this query's running total goes **negative** for heights
+> 337–626, which no real "stake bonded" figure can be. Don't read a "yield"
+> out of `amount_zats` on either side of a bond; see
+> [findings.md](findings.md#withdrawal-amounts-dont-reconcile-with-principal).
+
 ### Lifecycle of one bond
 
 ```sql

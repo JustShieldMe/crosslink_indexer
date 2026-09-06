@@ -174,3 +174,48 @@ is **79.8%**, comfortably above the 66.7% threshold.
 
 Any dashboard built on `signer_count / roster_size` will show a false crisis.
 Use `signer_power / roster_power`; `bft_block` stores both precomputed.
+
+---
+
+## Withdrawal amounts don't reconcile with principal
+
+Every `WithdrawDelegationBond` this chain has ever recorded, against what that
+same `bond_key`'s `CreateNewDelegationBond` originally staked:
+
+| Created (ctaz) | Withdrawn (ctaz) | Ratio |
+|---|---|---|
+| 0.01 | 0.0375 | 3.75× |
+| 0.01 | 599.5655 | 59,957× |
+| 10.0 | 20.8661 | 2.09× |
+| 10.0 | 76.7404 | 7.67× |
+| 10.0 | 10.0052 | 1.00× |
+| 100.0 | 116.9735 | 1.17× |
+
+**Verification.** Direct join of the two actions on `bond_key`, both kinds
+appearing exactly as decoded — not a display or byte-order artefact (these are
+small amounts, easy to eyeball, and the same 6 bonds are the only ones with a
+matching `BeginDelegationUnbonding` first, i.e. the lifecycle order holds).
+
+**Why it's not just yield.** [concepts.md](concepts.md#what-is-not-in-the-data)
+already notes no field separates yield from principal — but a devnet staking
+mechanism returning nearly **60,000 times** a 0.01 ctaz stake within 301
+blocks isn't a yield rate by any plausible model. The more likely reading,
+consistent with an earlier finding that decoded amounts matched an operator's
+own staking script logs to four decimal places, is that these are
+test/operator-driven withdrawals on a workshop devnet rather than organic
+economic activity — but the indexer has no way to confirm intent, only what
+was recorded.
+
+**Why it matters.** The [cumulative stake bonded](queries.md#cumulative-stake-bonded)
+query nets `CreateNewDelegationBond` against `WithdrawDelegationBond` by
+design — reasonable, since both are principal movements by kind. But because
+withdrawal amounts don't track what was staked, that running total goes
+**negative** for BFT heights 337–626 (it recovers once later creates outrun
+the anomaly), which no real bonded-stake figure can be. At daily resolution
+the effect disappears — 824 ctaz of withdrawals against 2.16M ever bonded — so
+this is a per-bond irregularity, not a threat to the macro trend.
+
+**What is not established.** Whether this is intentional test behaviour, a
+quirk of how the operator's staking script computed withdrawal amounts, or
+something in the consensus code that isn't visible from decoded transaction
+bytes alone. Six data points is not enough to fit a model to.
