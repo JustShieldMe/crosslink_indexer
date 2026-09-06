@@ -115,6 +115,57 @@ than any single value.
 
 ---
 
+## Finality stalls are rare, isolated, and correlate with small quorums
+
+99.91% of BFT heights decide in under 10 rounds. 86 (0.09%) needed 10 or more;
+13 of those (0.013%) needed 30 or more, up to **281** at height 20,626. The 5
+most recent, all within the last three weeks of indexed history:
+
+| BFT height | Date (UTC) | Rounds | Final quorum | Margin |
+|---|---|---|---|---|
+| 90,732 | 2026-09-02 07:44 | 46 | 12/39 | 69.4% |
+| 90,652 | 2026-09-01 23:31 | 70 | 11/39 | 67.1% |
+| 88,248 | 2026-09-01 02:16 | 19 | 16/39 | 78.8% |
+| 53,835 | 2026-08-19 13:48 | 68 | 9/37 | 66.8% |
+| 50,886 | 2026-08-17 03:20 | 155 | 9/36 | 67.8% |
+
+Height 88,248 was the tail of a tighter cluster — seven heights between
+88,239 and 88,248, all within one hour on 2026-09-01, each needing 10–19
+rounds at a comfortable 73.7–78.8% margin. The two severe stalls 21 hours
+later (90,652, 90,732) look different in character: fewer, larger-power
+signers, and margins sitting close to the 66.7% threshold (67.1%, 69.4%).
+
+**Verification.** For all 5 heights, checked directly against `roster_entry`
+rather than assumed:
+
+* **Roster composition is byte-for-byte identical** the height before, during,
+  and after every one — no finalizer joined or left, and `roster_power` moved
+  only by routine stake accrual. Membership churn is ruled out.
+* **Every stall resolves by the very next height** — round 0–2 in 4 of 5 cases.
+  Nothing about these is a sustained network split; each is a self-contained,
+  single-height event.
+* Across the full 86-height tail, heights needing 30+ rounds were decided by
+  fewer final signers on average than heights needing 10–29 (mean 8.5 vs
+  10.8 signers; correlation −0.30 between round count and signer count). Not a
+  strong correlation, but directionally consistent with the idea that a
+  smaller, more concentrated winning coalition takes longer to assemble.
+* The finalizer with a lifetime 0% signing rate (see above) was in the roster
+  at all 5, holding 2.9–3.5% of total power each time — a permanent, small
+  drag on the achievable margin, but nowhere near enough on its own to explain
+  a climb to 155 or 281 rounds.
+
+**What is not established.** `bft_signature` records only the *winning*
+round's signers — `pos.chain` does not retain who was asked and did not answer
+in the rounds that failed before it (see [limits](schema.md#limits)). So this
+can rule causes out and surface correlates, but cannot name which specific
+finalizer(s) were slow to respond in a given stall, or distinguish network
+latency, load, and a leader-rotation quirk from each other. That would need
+instrumentation on the node itself.
+
+Reproduce this with the queries in [queries.md](queries.md#finality-stalls).
+
+---
+
 ## Signature count is a poor proxy for finality health
 
 Certificates typically carry 14–18 signatures against rosters of 37–48 members,

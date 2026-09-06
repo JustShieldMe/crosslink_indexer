@@ -98,6 +98,43 @@ SELECT (bft_height / 5000) * 5000 AS bucket,
 FROM bft_block GROUP BY bucket ORDER BY bucket;
 ```
 
+### Finality stalls
+
+Heights that needed an unusual number of rounds, joined to the PoW block they
+finalized for a calendar date. `cert_round >= 10` is a deliberate cutoff, not a
+round number: 99.91% of this chain's history decides in under 10 rounds, so
+crossing it is already rare (86 heights out of 99,467 at last count).
+
+```sql
+SELECT b.bft_height, b.cert_round, b.roster_size,
+       ROUND(b.roster_power/1e8,2) AS roster_ctaz, b.signer_count,
+       ROUND(100.0*b.signer_power/b.roster_power,2) AS pct,
+       datetime(p.time,'unixepoch') AS approx_time
+FROM bft_block b
+LEFT JOIN pow_block p ON p.hash = b.candidate_hash
+WHERE b.cert_round >= 10
+ORDER BY b.bft_height DESC;
+```
+
+Whether the roster itself moved right around a flagged height — a real
+membership change would explain a struggle to re-establish quorum; an
+unchanged roster points elsewhere:
+
+```sql
+SELECT 'joined' AS chg, hex(pub_key) FROM roster_entry
+WHERE bft_height = :h
+  AND pub_key NOT IN (SELECT pub_key FROM roster_entry WHERE bft_height = :h - 1)
+UNION ALL
+SELECT 'left', hex(pub_key) FROM roster_entry
+WHERE bft_height = :h - 1
+  AND pub_key NOT IN (SELECT pub_key FROM roster_entry WHERE bft_height = :h);
+```
+
+> `bft_block` carries no timestamp of its own — only `cert_height`/`cert_round`
+> and the roster/signer tallies. The `approx_time` above is the *finalized PoW
+> block's* time, which is a fine proxy but not the moment the BFT decision
+> itself landed. See [findings.md](findings.md#finality-stalls-are-rare-isolated-and-correlate-with-small-quorums).
+
 ### Roster churn
 
 ```sql
@@ -153,6 +190,46 @@ GROUP BY bucket, miner_address
 HAVING blocks > 100
 ORDER BY bucket, blocks DESC;
 ```
+
+### Top miners' cumulative rewards over time
+
+Ranks miners by lifetime reward, then walks daily cumulative earnings for just
+that top 10 — the shape a "who's winning" chart wants.
+
+```sql
+WITH top_miners AS (
+  SELECT miner_address, SUM(subsidy_zats) AS total_zats
+  FROM pow_block
+  WHERE miner_address IS NOT NULL AND height > 0
+  GROUP BY miner_address
+  ORDER BY total_zats DESC
+  LIMIT 10
+),
+daily AS (
+  SELECT date(time, 'unixepoch') AS day, miner_address, SUM(subsidy_zats) AS day_zats
+  FROM pow_block
+  WHERE height > 0 AND miner_address IN (SELECT miner_address FROM top_miners)
+  GROUP BY day, miner_address
+)
+SELECT day, miner_address,
+       ROUND(SUM(day_zats) OVER (PARTITION BY miner_address ORDER BY day) / 1e8, 4)
+         AS cumulative_ctaz
+FROM daily
+ORDER BY miner_address, day;
+```
+
+> **`height > 0` is not a style choice — it excludes a bad timestamp.** Block 0
+> carries a placeholder genesis time inherited from upstream Zcash params
+> (`2016-10-28`), a decade before this devnet existed. Block 1's timestamp is
+> the real inception (`2026-04-16` on this index). Include height 0 in a
+> time-bucketed query and it opens the chart with a decade-wide empty gap.
+> `time` is otherwise miner-supplied and not strictly monotonic — see
+> [schema.md](schema.md#pow_block).
+>
+> Days with no block from a given miner are simply absent from `daily`, so a
+> plotted line will skip from one dated point to the next rather than holding
+> flat. To force a continuous line, left-join against a generated calendar
+> (`WITH RECURSIVE`) and `COALESCE` missing days to 0 before the running sum.
 
 ### Block interval
 
