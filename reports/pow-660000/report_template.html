@@ -1,0 +1,407 @@
+<title>Season One Reward Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --bg:#F6F8F7; --surface:#FFFFFF; --ink:#17211E; --muted:#5C6964; --rule:#D6DDD9; --rule-strong:#B9C4BF;
+  --accent:#0E6B57; --accent-soft:#E2F0EB;
+  --warn:#9A5B00; --warn-soft:#FBEFD9; --crit:#A8261C; --crit-soft:#F8E1DE; --ok:#1F6B3A; --ok-soft:#E1F1E6;
+  --code:#EEF2F0;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#101614; --surface:#161E1B; --ink:#E3EAE7; --muted:#95A49E; --rule:#27322E; --rule-strong:#3A4843;
+    --accent:#5CC6A6; --accent-soft:#16302A;
+    --warn:#E7AE52; --warn-soft:#33270F; --crit:#F08C82; --crit-soft:#3A1916; --ok:#6FCB8E; --ok-soft:#15301F;
+    --code:#1B2521;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#101614; --surface:#161E1B; --ink:#E3EAE7; --muted:#95A49E; --rule:#27322E; --rule-strong:#3A4843;
+  --accent:#5CC6A6; --accent-soft:#16302A;
+  --warn:#E7AE52; --warn-soft:#33270F; --crit:#F08C82; --crit-soft:#3A1916; --ok:#6FCB8E; --ok-soft:#15301F;
+  --code:#1B2521;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--body);padding-inline:20px;padding-block:0 64px}
+.wrap{max-width:1100px;margin:0 auto}
+header.top{padding-block:44px 28px;border-bottom:1px solid var(--rule)}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:600 clamp(30px,5vw,44px)/1.08 var(--display);letter-spacing:-.01em;margin:12px 0 14px;text-wrap:balance}
+h2{font:600 24px/1.2 var(--display);margin:0 0 6px;text-wrap:balance}
+h3{font:600 17px/1.3 var(--display);margin:0 0 4px}
+p{margin:0;max-width:68ch}
+.lede{font-size:17px;color:var(--ink);max-width:70ch}
+.meta{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:18px;font:13px/1.4 var(--mono);color:var(--muted)}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:40px 8px;display:grid;gap:18px}
+.sub{color:var(--muted);max-width:72ch}
+.mono{font-family:var(--mono)}
+.num{font-variant-numeric:tabular-nums}
+code{font:13px var(--mono);background:var(--code);padding:1px 5px;border-radius:3px;overflow-wrap:anywhere}
+pre{font:12.5px/1.6 var(--mono);background:var(--code);padding:14px 16px;border-radius:4px;overflow-x:auto;margin:0}
+a{color:var(--accent)}
+
+/* ledger */
+.ledger{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ledger th,.ledger td{padding:10px 12px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:baseline}
+.ledger th{font:500 11.5px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.ledger td.r,.ledger th.r{text-align:right}
+.ledger tfoot td{border-top:2px solid var(--rule-strong);border-bottom:none;font-weight:600}
+.ledger .note{color:var(--muted);font-size:13px}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--rule);border-radius:4px}
+
+/* validation */
+.checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.check{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.check .res{font:600 13px/1 var(--mono);color:var(--ok)}
+.check p{font-size:14px;color:var(--muted)}
+
+/* decisions */
+.decisions{display:grid;gap:0;border-top:1px solid var(--rule)}
+.dec{display:grid;grid-template-columns:56px 1fr;gap:4px 18px;padding-block:18px;border-bottom:1px solid var(--rule)}
+.dec .id{font:600 14px/1.5 var(--mono);color:var(--accent)}
+.dec .body{display:grid;gap:8px}
+.dec p{font-size:14.5px}
+.dec .fig{font:13px/1.5 var(--mono);color:var(--muted)}
+@media (max-width:560px){.dec{grid-template-columns:1fr}}
+
+/* data tables */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.controls input,.controls select{font:14px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--rule-strong);border-radius:4px;padding:8px 10px;min-width:0}
+.controls input{flex:1 1 260px}
+.controls input:focus-visible,.controls select:focus-visible,th button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.count{font:13px var(--mono);color:var(--muted)}
+table.data{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+table.data th,table.data td{padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;text-align:right}
+table.data th:first-child,table.data td:first-child,table.data td.l,table.data th.l{text-align:left}
+table.data thead th{position:sticky;top:0;background:var(--surface);z-index:1;border-bottom:1px solid var(--rule-strong)}
+table.data th button{all:unset;cursor:pointer;font:500 11px/1.3 var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+table.data th button[aria-sort]{color:var(--ink)}
+table.data th button[aria-sort="ascending"]::after{content:" ↑"}
+table.data th button[aria-sort="descending"]::after{content:" ↓"}
+table.data tbody tr:hover td{background:var(--accent-soft)}
+.key{font:12.5px var(--mono)}
+.tall{max-height:560px;overflow:auto}
+.pill{display:inline-block;font:500 11px/1 var(--mono);padding:4px 7px;border-radius:3px;letter-spacing:.02em}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.crit{background:var(--crit-soft);color:var(--crit)}
+.pill.idle{background:var(--code);color:var(--muted)}
+.dim{color:var(--muted)}
+.bad{color:var(--crit)}
+
+.files{display:grid;gap:6px;font:13px/1.5 var(--mono)}
+.files div{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:12px}
+.files span:last-child{color:var(--muted);font-family:var(--body);font-size:13.5px}
+@media (max-width:560px){.files div{grid-template-columns:1fr;gap:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Crosslink Season One · snapshot at PoW 660,000</div>
+  <h1>Season One Reward Ledger</h1>
+  <p class="lede">Mining rewards, staking positions, accrued staking rewards and finalizer participation for every network participant, through block 660,000 inclusive. Staking figures come from a replay of zebra-state's own consensus code and match the live node exactly.</p>
+  <div class="meta">
+    <span>PoW cutoff <b>660,000</b></span>
+    <span>BFT counterpart <b>126,209</b> (finalizes PoW 659,999)</span>
+    <span>Hardfork schedule <b>3 rules</b> (225,000 · 655,350 · 658,200)</span>
+    <span>Prepared <b>2026-09-30</b></span>
+  </div>
+</header>
+
+<section id="ledger">
+  <div>
+    <h2>Issuance through block 660,000</h2>
+    <p class="sub">Every block issues 11.25 ctaz in three streams. The miner's 5 ctaz and the 1.25 ctaz dev-fund payment are coinbase outputs. The 5 ctaz staking reward is not a transaction: it is added directly to every active bond, split by bond size, and compounds.</p>
+  </div>
+  <div class="scroll">
+  <table class="ledger">
+    <thead><tr><th>Stream</th><th class="r">Per block</th><th class="r">Blocks</th><th class="r">Issued (ctaz)</th><th>Recipients</th></tr></thead>
+    <tbody>
+      <tr><td>Mining subsidy + fees</td><td class="r">5.00 + fees</td><td class="r">660,000</td><td class="r">3,300,036.98</td><td>76 miner addresses<div class="note">includes 36.98 ctaz of fees</div></td></tr>
+      <tr><td>Dev fund (MajorGrants, 20%)</td><td class="r">1.25</td><td class="r">660,000</td><td class="r">825,000.00</td><td><code>t27tjLaUJZ53JKqWPkgd1XCTNWF636eLQRg</code><div class="note">not a participant; excluded below</div></td></tr>
+      <tr><td>Staking issuance</td><td class="r">5.00</td><td class="r">659,965</td><td class="r">3,299,825.00</td><td>10,737 delegation bonds<div class="note">no issuance in the 35 early blocks with no active bond</div></td></tr>
+    </tbody>
+    <tfoot><tr><td>Total</td><td></td><td></td><td class="r">7,424,861.98</td><td></td></tr></tfoot>
+  </table>
+  </div>
+
+  <div class="scroll">
+  <table class="ledger">
+    <thead><tr><th>Bond status at 660,000</th><th class="r">Bonds</th><th class="r">Principal (ctaz)</th><th class="r">Value (ctaz)</th><th class="r">Accrued (ctaz)</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill ok">Active</span></td><td class="r">10,384</td><td class="r">2,767,051.45</td><td class="r">5,679,792.09</td><td class="r">2,912,740.64</td></tr>
+      <tr><td><span class="pill crit">Burned</span> <span class="note">by social slashing</span></td><td class="r">341</td><td class="r">14,672.24</td><td class="r">401,020.00</td><td class="r">386,347.76</td></tr>
+      <tr><td><span class="pill idle">Withdrawn</span></td><td class="r">10</td><td class="r">140.12</td><td class="r">834.54</td><td class="r">694.42</td></tr>
+      <tr><td><span class="pill idle">Unbonding</span></td><td class="r">2</td><td class="r">51.00</td><td class="r">93.18</td><td class="r">42.18</td></tr>
+    </tbody>
+    <tfoot><tr><td>All bonds</td><td class="r">10,737</td><td class="r">2,781,914.81</td><td class="r">6,081,739.81</td><td class="r">3,299,825.00</td></tr></tfoot>
+  </table>
+  </div>
+  <p class="sub">A bond's amount stops changing when it leaves the Active state, so for every bond <code>accrued = value − principal</code>. Accrued across all bonds equals staking issuance exactly.</p>
+</section>
+
+<section id="validation">
+  <div>
+    <h2>How the figures were checked</h2>
+    <p class="sub">Staking rewards are state, so they cannot be read from transactions. The replay feeds every indexed staking action into <code>zebra_state::StakingReplay</code>, which applies each block's actions in transaction order, then the 5 ctaz reward, then any slash burns. The results were then checked against the running node.</p>
+  </div>
+  <div class="checks">
+    <div class="check"><div class="res">EXACT · conservation</div><h3>Every issued zat is accounted for</h3><p>659,965 × 5 ctaz = 3,299,825.00 issued; accrued summed over all 10,737 bonds is the same figure to the zatoshi.</p></div>
+    <div class="check"><div class="res">353 / 353 EXACT</div><h3>Frozen bonds vs the node</h3><p>Every burned, withdrawn and unbonding bond compared with <code>getbondinfo</code>: amount and status identical, including all 341 bonds burned by the three slashes.</p></div>
+    <div class="check"><div class="res">44 / 44 EXACT</div><h3>Active bonds at one height</h3><p>40 random bonds plus the largest, including the bond that takes each block's rounding remainder, snapshotted at height 665,834 and replayed to the same height.</p></div>
+    <div class="check"><div class="res">660,001 ROWS · NO GAPS</div><h3>Index integrity</h3><p>A stale fork tail above 559,148 was discarded and re-indexed; stored hashes were spot-checked against the node through 660,000.</p></div>
+  </div>
+</section>
+
+<section id="decisions">
+  <div>
+    <h2>Decisions for the reward process</h2>
+    <p class="sub">The protocol paid staking rewards by bond size alone. These are the places where that may not match what the team intends to reward. The IDs are for reference in discussion.</p>
+  </div>
+  <div class="decisions">
+    <div class="dec"><div class="id">D1</div><div class="body">
+      <h3>Burned bonds: 401,020 ctaz across 341 bonds</h3>
+      <p>Three social slashes burned every bond that pointed at a terminated finalizer at any point in a window before activation, including bonds that retargeted or unbonded away inside the window. Most of the burned value is staking reward accrued before the burn.</p>
+      <div class="fig">PoW 225,000 · 1 finalizer · 159 bonds · 189,458.71 ctaz<br>PoW 655,350 · 17 finalizers · 100 bonds · 61,941.24 ctaz<br>PoW 658,200 · 3 finalizers · 82 bonds · 149,620.05 ctaz</div>
+      <p>The 658,200 rule burned 81,736.24 ctaz on <code>22d586eba970a072…</code>, a finalizer that signed 54.6% of the BFT blocks it was eligible for. Its delegators may not have had reason to expect a slash.</p>
+    </div></div>
+    <div class="dec"><div class="id">D2</div><div class="body">
+      <h3>Rewards ignored finalizer performance</h3>
+      <p>Issuance does not look at which finalizer a bond targets or whether that finalizer signs. Delegators to a finalizer that never signed earned the same rate as delegators to the most reliable one. Sign rates are in the finalizer table if the team wants to weight by them. At the cutoff, only one finalizer with active stake signs less than half the time: <code>2cf7e8bda2dc6590…</code> at 40.5% with 85,379.08 ctaz.</p>
+    </div></div>
+    <div class="dec"><div class="id">D3</div><div class="body">
+      <h3>Mirror keys: stake delegated to byte-reversed finalizer keys</h3>
+      <p>17 roster keys are the exact byte-reversal of a real, signing finalizer's key. None of them has ever signed a BFT block. This is consistent with delegation tooling that serialized the target key in the wrong byte order. Stake on these keys earned full rewards while adding no voting power to the finalizer it was meant for.</p>
+      <p>The largest case: <code>034ad1af698987ba…</code>, the mirror of the top finalizer, held a mean of 107,092 ctaz of roster power over 111,827 eligible BFT heights and signed nothing. By 660,000 almost all such stake had been retargeted (321 bonds were retargeted in total); 134.54 ctaz still sat on mirror keys, most of it burned.</p>
+    </div></div>
+    <div class="dec"><div class="id">D4</div><div class="body">
+      <h3>Stake cannot be tied to wallets from chain data</h3>
+      <p>Bonds are created by shielded transactions. The chain records a bond key and a target finalizer, not the wallet that funded the bond, and there is no separate finalizer reward: an operator's staking income is the bonds they created. Mining is different: coinbase outputs go to transparent addresses.</p>
+      <p>Two ways to attribute: participants submit a UFVK and the team runs the node's <code>get_total_issuance(ufvks, 1, 660000)</code>, which uses the same <code>StakingReplay</code> and so reproduces these figures per wallet; or participants prove ownership of bond keys and miner addresses by signing a challenge.</p>
+    </div></div>
+    <div class="dec"><div class="id">D5</div><div class="body">
+      <h3>Withdrawn and unbonding bonds</h3>
+      <p>10 withdrawn bonds (834.54 ctaz) have already paid out their principal and rewards to their owners. 2 bonds (93.18 ctaz) were mid-unbonding at the cutoff. Decide whether realized rewards count toward the allocation.</p>
+    </div></div>
+    <div class="dec"><div class="id">D6</div><div class="body">
+      <h3>Cutoff and schedule</h3>
+      <p>Figures include block 660,000's staking reward. The BFT counterpart is height 126,209, the last BFT block finalizing a PoW block at or below the cutoff. Burns follow the node's current three-rule schedule; the replay reads the schedule from <code>zebrad.toml</code>, so if the adopted schedule changes, rerun it rather than adjusting figures by hand.</p>
+    </div></div>
+  </div>
+</section>
+
+<section id="finalizers">
+  <div>
+    <h2>Finalizers</h2>
+    <p class="sub">All 57 keys that ever held a roster seat through BFT 126,209. Keys are shown in RPC display order, the orientation used in node logs and <code>get_tfl_*</code> output. Stake is valued at PoW 660,000. Mean roster power is averaged over the heights a key was eligible.</p>
+  </div>
+  <div class="controls">
+    <input id="f-q" type="search" placeholder="Filter by key prefix" aria-label="Filter finalizers by key prefix">
+    <select id="f-s" aria-label="Filter finalizers by status">
+      <option value="">All statuses</option><option value="roster">In roster at cutoff</option><option value="out">Out of roster</option><option value="term">Terminated</option><option value="mirror">Mirror key</option>
+    </select>
+    <span class="count" id="f-n"></span>
+  </div>
+  <div class="scroll tall"><table class="data" id="f-t"></table></div>
+</section>
+
+<section id="miners">
+  <div>
+    <h2>Miners</h2>
+    <p class="sub">76 transparent addresses received the miner's coinbase output in blocks 1 to 660,000. The top ten produced 77.4% of blocks.</p>
+  </div>
+  <div class="controls">
+    <input id="m-q" type="search" placeholder="Filter by address" aria-label="Filter miners by address">
+    <span class="count" id="m-n"></span>
+  </div>
+  <div class="scroll tall"><table class="data" id="m-t"></table></div>
+</section>
+
+<section id="bonds">
+  <div>
+    <h2>Bond lookup</h2>
+    <p class="sub">Search all 10,737 bonds by bond key or by target finalizer (at least 4 hex characters). Bond keys are raw <code>arg32_0</code> bytes, the form <code>getbondinfo</code> accepts. The full table is in <code>bonds.csv</code>.</p>
+  </div>
+  <div class="controls">
+    <input id="b-q" type="search" placeholder="Bond key or finalizer, e.g. a9968c40" aria-label="Search bonds by bond key or finalizer">
+    <span class="count" id="b-n"></span>
+  </div>
+  <div class="scroll tall"><table class="data" id="b-t"></table></div>
+</section>
+
+<section id="files">
+  <div>
+    <h2>Data and reproduction</h2>
+    <p class="sub">Everything is in <code>~/crosslink-indexer/reports/pow-660000/</code> on the node host.</p>
+  </div>
+  <div class="files">
+    <div><span>bonds.csv</span><span>One row per bond: key, current and original target, created height, principal, value, accrued, status and the height it changed.</span></div>
+    <div><span>finalizers.csv</span><span>Per finalizer: termination, roster presence, BFT signing, bond counts, active, accrued and burned value.</span></div>
+    <div><span>miners.csv</span><span>Per miner address: blocks, share, height range, subsidy, fees and total.</span></div>
+    <div><span>replay_staking_rewards.rs</span><span>The replay tool, a zebra-crosslink example built on <code>zebra_state::StakingReplay</code>.</span></div>
+    <div><span>analyze.py</span><span>Joins the replay, BFT participation and mining into the tables above.</span></div>
+  </div>
+<pre>crosslink-indexer --db rewards_660k.sqlite pow --to 660000
+crosslink-indexer --db bft_now.sqlite bft --pos-chain &lt;cache&gt;/pos.chain
+sqlite3 -separator $'\t' rewards_660k.sqlite "SELECT height, tx_index, kind_name, amount_zats,
+  lower(hex(bond_key)), lower(hex(coalesce(target_finalizer, x''))) FROM staking_action
+  ORDER BY height, tx_index" &gt; actions.tsv
+cargo run --release -p zebra-crosslink --example replay_staking_rewards -- \
+  actions.tsv ~/.config/zebrad.toml 660000 bonds.csv
+python3 analyze.py</pre>
+</section>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const LIVE = new Set(D.live);
+const n0 = new Intl.NumberFormat("en-US");
+const c2 = new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const c8 = new Intl.NumberFormat("en-US",{minimumFractionDigits:8,maximumFractionDigits:8});
+const z8 = z => c8.format(z/1e8);
+function el(tag, cls, text){const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e;}
+function pill(kind, text){return el("span","pill "+kind,text);}
+
+function finalizerStatus(r){
+  if (r[1]) return ["crit","Terminated @ "+n0.format(+r[1]),"term"];
+  if (r[3] && !LIVE.has(r[0])) return ["warn","Mirror key","mirror"];
+  if (r[2]) return ["ok","In roster","roster"];
+  return ["idle","Out of roster","out"];
+}
+
+function makeTable(table, cols, rows, sortIdx, sortDir, render){
+  let si = sortIdx, sd = sortDir;
+  const thead = el("thead"), tr = el("tr");
+  cols.forEach((c,i)=>{
+    const th = el("th", c.l ? "l" : "");
+    const b = el("button", null, c.h); b.type = "button";
+    b.addEventListener("click", ()=>{ if (si===i) sd=-sd; else { si=i; sd = c.l ? 1 : -1; } draw(); });
+    th.appendChild(b); tr.appendChild(th);
+  });
+  thead.appendChild(tr); table.appendChild(thead);
+  const tbody = el("tbody"); table.appendChild(tbody);
+  let current = rows;
+  function draw(){
+    [...tr.children].forEach((th,i)=>{ const b=th.firstChild; if(i===si) b.setAttribute("aria-sort", sd>0?"ascending":"descending"); else b.removeAttribute("aria-sort"); });
+    const key = cols[si].k;
+    const sorted = [...current].sort((a,b)=>{ const x=key(a), y=key(b); return (x<y?-1:x>y?1:0)*sd; });
+    tbody.replaceChildren(...sorted.map(render));
+  }
+  return { set(rs){ current = rs; draw(); } };
+}
+
+/* finalizers */
+const fcols = [
+  {h:"Finalizer", l:1, k:r=>r[0]},
+  {h:"Status", l:1, k:r=>finalizerStatus(r)[1]},
+  {h:"Sign rate", k:r=>r[6]},
+  {h:"Signed / eligible", k:r=>r[5]},
+  {h:"Mean roster power", k:r=>r[7]},
+  {h:"Active stake", k:r=>r[8]},
+  {h:"Share", k:r=>r[9]},
+  {h:"Accrued", k:r=>r[10]},
+  {h:"Burned", k:r=>r[11]},
+  {h:"Bonds", k:r=>r[12]},
+];
+const ft = makeTable(document.getElementById("f-t"), fcols, D.F, 5, -1, r=>{
+  const tr = el("tr"), [pk, pt] = finalizerStatus(r);
+  const k = el("td","l key", r[0].slice(0,16)+"…"); k.title = r[0]; tr.appendChild(k);
+  const s = el("td","l"); s.appendChild(pill(pk,pt)); tr.appendChild(s);
+  tr.appendChild(el("td", r[4] ? (r[6]<50 ? "bad" : "") : "dim", r[4] ? r[6].toFixed(1)+"%" : "—"));
+  tr.appendChild(el("td", "dim", n0.format(r[5])+" / "+n0.format(r[4])));
+  tr.appendChild(el("td", null, c2.format(r[7])));
+  tr.appendChild(el("td", null, c2.format(r[8])));
+  tr.appendChild(el("td", "dim", r[9].toFixed(2)+"%"));
+  tr.appendChild(el("td", null, c2.format(r[10])));
+  tr.appendChild(el("td", r[11]>0 ? "bad" : "dim", r[11]>0 ? c2.format(r[11]) : "—"));
+  tr.appendChild(el("td", "dim", n0.format(r[12])));
+  return tr;
+});
+function filterF(){
+  const q = document.getElementById("f-q").value.trim().toLowerCase();
+  const s = document.getElementById("f-s").value;
+  const rs = D.F.filter(r=> (!q || r[0].startsWith(q)) && (!s || finalizerStatus(r)[2]===s));
+  document.getElementById("f-n").textContent = rs.length+" of "+D.F.length;
+  ft.set(rs);
+}
+document.getElementById("f-q").addEventListener("input", filterF);
+document.getElementById("f-s").addEventListener("change", filterF);
+filterF();
+
+/* miners */
+const mcols = [
+  {h:"Address", l:1, k:r=>r[0]},
+  {h:"Blocks", k:r=>r[1]},
+  {h:"Share of blocks", k:r=>r[2]},
+  {h:"First height", k:r=>r[3]},
+  {h:"Last height", k:r=>r[4]},
+  {h:"Rewards (ctaz)", k:r=>r[5]},
+  {h:"Of which fees", k:r=>r[6]},
+];
+const mt = makeTable(document.getElementById("m-t"), mcols, D.M, 5, -1, r=>{
+  const tr = el("tr");
+  tr.appendChild(el("td","l key", r[0]));
+  tr.appendChild(el("td", null, n0.format(r[1])));
+  tr.appendChild(el("td", "dim", r[2].toFixed(2)+"%"));
+  tr.appendChild(el("td", "dim", n0.format(r[3])));
+  tr.appendChild(el("td", "dim", n0.format(r[4])));
+  tr.appendChild(el("td", null, c2.format(r[5])));
+  tr.appendChild(el("td", "dim", c2.format(r[6])));
+  return tr;
+});
+function filterM(){
+  const q = document.getElementById("m-q").value.trim();
+  const rs = D.M.filter(r=> !q || r[0].toLowerCase().includes(q.toLowerCase()));
+  document.getElementById("m-n").textContent = rs.length+" of "+D.M.length;
+  mt.set(rs);
+}
+document.getElementById("m-q").addEventListener("input", filterM);
+filterM();
+
+/* bonds */
+const SN = ["Active","Unbonding","Withdrawn","Burned"], SK = ["ok","idle","idle","crit"];
+const bt = document.getElementById("b-t");
+const bhead = el("thead"), bhr = el("tr");
+["Bond key","Target finalizer","Status","Created","Principal (ctaz)","Value (ctaz)","Accrued (ctaz)","Retargets"].forEach((h,i)=>{
+  const th = el("th", i<3 ? "l" : ""); th.appendChild(el("span", null, h)); th.style.font = "500 11px/1.3 var(--mono)"; th.style.letterSpacing = ".05em"; th.style.textTransform = "uppercase"; th.style.color = "var(--muted)"; bhr.appendChild(th);
+});
+bhead.appendChild(bhr); bt.appendChild(bhead);
+const bbody = el("tbody"); bt.appendChild(bbody);
+const LIMIT = 200;
+function filterB(){
+  const q = document.getElementById("b-q").value.trim().toLowerCase();
+  const out = document.getElementById("b-n");
+  if (q.length < 4 || !/^[0-9a-f]+$/.test(q)) {
+    bbody.replaceChildren();
+    out.textContent = q ? "Enter at least 4 hex characters" : "10,737 bonds";
+    return;
+  }
+  const hits = D.B.filter(b=> b[0].startsWith(q) || b[1].startsWith(q));
+  let v=0, a=0; hits.forEach(b=>{ v+=b[4]; a+=b[5]; });
+  out.textContent = n0.format(hits.length)+" bonds · value "+c2.format(v/1e8)+" ctaz · accrued "+c2.format(a/1e8)+" ctaz"+(hits.length>LIMIT ? " · showing "+LIMIT : "");
+  bbody.replaceChildren(...hits.slice(0,LIMIT).map(b=>{
+    const tr = el("tr");
+    const k = el("td","l key", b[0].slice(0,16)+"…"); k.title = b[0]; tr.appendChild(k);
+    const t = el("td","l key", b[1].slice(0,16)+"…"); t.title = b[1]; tr.appendChild(t);
+    const s = el("td","l"); s.appendChild(pill(SK[b[6]], SN[b[6]] + (b[7] ? " @ "+n0.format(b[7]) : ""))); tr.appendChild(s);
+    tr.appendChild(el("td","dim", n0.format(b[2])));
+    tr.appendChild(el("td", null, z8(b[3])));
+    tr.appendChild(el("td", null, z8(b[4])));
+    tr.appendChild(el("td", null, z8(b[5])));
+    tr.appendChild(el("td","dim", n0.format(b[8])));
+    return tr;
+  }));
+}
+document.getElementById("b-q").addEventListener("input", filterB);
+document.getElementById("b-q").value = "a9968c40";
+filterB();
+</script>

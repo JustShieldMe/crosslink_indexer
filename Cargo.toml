@@ -11,10 +11,16 @@ license = "MIT"
 # VCrosslink transaction variant that hold every staking action. The crates.io
 # crate of the same name and version has none of that, so this path is load
 # bearing; see README "Why this repo is not dependency-free".
-zcash_primitives = { path = "../crosslink_monolith/librustzcash/zcash_primitives" }
+#
+# Points at crosslink_v14p, the exact tree the live zebrad binary is built
+# from (zebra-crosslink/target/release/zebrad symlinks to
+# crosslink_v14p/target_release/release/zebrad) -- not the crosslink_monolith
+# dev checkout, whose zcash_primitives is a different, older-struct-based
+# StakingAction and is no longer wire-compatible with the live node.
+zcash_primitives = { path = "../crosslink_v14p/librustzcash/zcash_primitives" }
 # BranchId lives here, not in zcash_primitives; depend on it explicitly rather
 # than relying on a re-export.
-zcash_protocol = { path = "../crosslink_monolith/librustzcash/components/zcash_protocol" }
+zcash_protocol = { path = "../crosslink_v14p/librustzcash/components/zcash_protocol" }
 
 rusqlite = { version = "0.32", features = ["bundled"] }
 ureq = { version = "2.12", features = ["json"] }

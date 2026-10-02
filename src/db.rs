@@ -8,7 +8,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 pub fn open(path: &str) -> Result<Connection> {
     let conn = Connection::open(path)?;
@@ -93,16 +93,26 @@ CREATE INDEX IF NOT EXISTS idx_pow_block_time  ON pow_block(time);
 
 -- ---------------------------------------------------------------- Staking
 -- Decoded from VCrosslink transaction bodies. Not available from any RPC.
+--
+-- v14 made `StakingAction` a real enum (one variant per kind, named fields)
+-- instead of a flat struct with generic `arg32_*` slots, so the columns below
+-- follow the enum's own field names rather than argument positions:
+--   bond_key          -- `unique_pubkey` on every variant
+--   target_finalizer  -- Create/Convert's target (`target_finalizer`/`this_finalizer`)
+--   from_finalizer    -- Retarget only: the finalizer the bond leaves
+--   to_finalizer      -- Retarget only: the finalizer the bond moves to
+-- There is no longer a generic "challenge" argument to store.
 CREATE TABLE IF NOT EXISTS staking_action (
     txid             BLOB    NOT NULL,
     height           INTEGER NOT NULL,
     tx_index         INTEGER NOT NULL,
     kind             INTEGER NOT NULL,
     kind_name        TEXT    NOT NULL,
-    amount_zats      INTEGER NOT NULL,
-    bond_key         BLOB    NOT NULL,  -- arg32_0, the unique pubkey identifying the bond
-    challenge        BLOB,              -- arg32_1
-    target_finalizer BLOB,              -- arg32_2, where meaningful for the kind
+    amount_zats      INTEGER NOT NULL,  -- 0 for kinds that carry none (BeginDelegationUnbonding)
+    bond_key         BLOB    NOT NULL,
+    target_finalizer BLOB,
+    from_finalizer   BLOB,
+    to_finalizer     BLOB,
     -- Staking actions are only consensus-valid when height % 150 < 70; recorded
     -- so a violation shows up as data rather than being silently normalised away.
     staking_period   INTEGER NOT NULL,
@@ -112,6 +122,7 @@ CREATE TABLE IF NOT EXISTS staking_action (
 CREATE INDEX IF NOT EXISTS idx_staking_height ON staking_action(height);
 CREATE INDEX IF NOT EXISTS idx_staking_bond   ON staking_action(bond_key, height);
 CREATE INDEX IF NOT EXISTS idx_staking_target ON staking_action(target_finalizer, height);
+CREATE INDEX IF NOT EXISTS idx_staking_to     ON staking_action(to_finalizer, height);
 CREATE INDEX IF NOT EXISTS idx_staking_kind   ON staking_action(kind, height);
 "#,
     )?;
